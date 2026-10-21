@@ -2,6 +2,8 @@
 
 Classifies the condition of four components of a hydraulic test rig (**cooler**, **valve**, **pump** and **accumulator**) from one 60-second load cycle of 17 sensor signals, and serves the predictions through a REST API.
 
+**Documentation:** [Architecture](docs/ARCHITECTURE.md) (diagrams, modules, data flow, design decisions) · [Project guide](docs/PROJECT_GUIDE.md) (how it was built, concepts, tools, interview questions)
+
 ## Results on the real dataset
 
 All 2,205 cycles of the UCI dataset, 204 features per cycle. The model for each component is chosen by 5-fold cross-validation on 80 % of the data and then scored once on the untouched 20 % test set.
@@ -129,6 +131,7 @@ docker run -p 8000:8000 hydraulic-api
 ## Project layout
 
 ```
+docs/           architecture and project guide
 src/hydraulic/
   config.py     sensor rates, label meanings, CV scheme per target
   data.py       loading, validation, synthetic generator
