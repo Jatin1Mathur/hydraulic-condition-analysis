@@ -1,0 +1,123 @@
+{
+  "data": "UCI hydraulic (2,205 cycles)",
+  "n_cycles": 2205,
+  "n_features": 204,
+  "components": {
+    "cooler": {
+      "cv_scheme": "stratified",
+      "best_model": "gradient_boosting",
+      "cv_scores": {
+        "logistic_regression": {
+          "mean": 0.9983,
+          "std": 0.0014
+        },
+        "random_forest": {
+          "mean": 0.9983,
+          "std": 0.0014
+        },
+        "extra_trees": {
+          "mean": 0.9983,
+          "std": 0.0014
+        },
+        "gradient_boosting": {
+          "mean": 0.9989,
+          "std": 0.0014
+        }
+      },
+      "test_accuracy": 1.0,
+      "test_f1_macro": 1.0,
+      "top_sensors": {
+        "CE": 0.291,
+        "PS6": 0.124,
+        "PS5": 0.108
+      }
+    },
+    "valve": {
+      "cv_scheme": "blocked",
+      "best_model": "gradient_boosting",
+      "cv_scores": {
+        "logistic_regression": {
+          "mean": 0.9139,
+          "std": 0.0865
+        },
+        "random_forest": {
+          "mean": 0.9461,
+          "std": 0.0448
+        },
+        "extra_trees": {
+          "mean": 0.8582,
+          "std": 0.0798
+        },
+        "gradient_boosting": {
+          "mean": 0.9835,
+          "std": 0.0163
+        }
+      },
+      "test_accuracy": 0.9909,
+      "test_f1_macro": 0.9884,
+      "top_sensors": {
+        "PS2": 0.249,
+        "FS1": 0.169,
+        "SE": 0.131
+      }
+    },
+    "pump": {
+      "cv_scheme": "blocked",
+      "best_model": "logistic_regression",
+      "cv_scores": {
+        "logistic_regression": {
+          "mean": 0.979,
+          "std": 0.0251
+        },
+        "random_forest": {
+          "mean": 0.9484,
+          "std": 0.0713
+        },
+        "extra_trees": {
+          "mean": 0.9473,
+          "std": 0.0717
+        },
+        "gradient_boosting": {
+          "mean": 0.9694,
+          "std": 0.0584
+        }
+      },
+      "test_accuracy": 1.0,
+      "test_f1_macro": 1.0,
+      "top_sensors": {
+        "SE": 0.32,
+        "FS1": 0.284,
+        "EPS1": 0.081
+      }
+    },
+    "accumulator": {
+      "cv_scheme": "stratified",
+      "best_model": "extra_trees",
+      "cv_scores": {
+        "logistic_regression": {
+          "mean": 0.9546,
+          "std": 0.0086
+        },
+        "random_forest": {
+          "mean": 0.9898,
+          "std": 0.0042
+        },
+        "extra_trees": {
+          "mean": 0.9921,
+          "std": 0.0042
+        },
+        "gradient_boosting": {
+          "mean": 0.9892,
+          "std": 0.006
+        }
+      },
+      "test_accuracy": 0.9909,
+      "test_f1_macro": 0.9901,
+      "top_sensors": {
+        "FS2": 0.109,
+        "SE": 0.085,
+        "TS1": 0.083
+      }
+    }
+  }
+}

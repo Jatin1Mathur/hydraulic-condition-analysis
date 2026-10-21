@@ -5,4 +5,4 @@ __pycache__/
 *.egg-info/
 data/raw/
 models/*.joblib
-reports/*.png
+# reports/ (plots + results.json from the real-data run) is committed on purpose

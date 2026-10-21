@@ -25,7 +25,7 @@ def test_predict_cycle(client, dataset):
     r = client.post("/predict/cycle", json=_cycle(dataset))
     assert r.status_code == 200
     body = r.json()
-    assert set(body) == {"cooler", "valve", "pump"}
+    assert set(body) == {"cooler", "valve", "pump", "accumulator"}
     assert body["pump"]["label"] in (0, 1, 2)
 
 

@@ -27,11 +27,36 @@ N_CYCLES = 2205
 # columns of profile.txt
 PROFILE_COLUMNS = ["cooler", "valve", "pump", "accumulator", "stable"]
 
-# the three targets this project classifies, with their label meanings
+# the four components this project classifies, with their label meanings
 TARGETS: dict[str, dict[int, str]] = {
     "cooler": {3: "close to total failure", 20: "reduced efficiency", 100: "full efficiency"},
     "valve": {100: "optimal", 90: "small lag", 80: "severe lag", 73: "close to total failure"},
     "pump": {0: "no leakage", 1: "weak leakage", 2: "severe leakage"},
+    "accumulator": {
+        130: "optimal pressure",
+        115: "slightly reduced pressure",
+        100: "severely reduced pressure",
+        90: "close to total failure",
+    },
 }
 
+# How models are selected per target.
+# "blocked": time-ordered folds (consecutive cycles stay together), so the score
+#   reflects unseen operating periods, not near-duplicate neighbouring cycles.
+# "stratified": shuffled folds. Used where a label occurs in only a few long
+#   blocks of time (cooler: 3 blocks, accumulator: 12), so a held-out time
+#   block would contain a class the model never saw.
+TARGET_CV: dict[str, str] = {
+    "cooler": "stratified",
+    "valve": "blocked",
+    "pump": "blocked",
+    "accumulator": "stratified",
+}
+
+# whole-cycle statistics
 FEATURE_STATS = ("mean", "std", "min", "max")
+# the cycle is split into this many equal time windows; the mean of each
+# window describes the signal's shape (e.g. how fast pressure builds up)
+N_WINDOWS = 6
+# trend and roughness features
+SHAPE_STATS = ("slope", "absdiff")

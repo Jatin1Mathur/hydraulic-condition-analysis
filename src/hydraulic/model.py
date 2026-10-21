@@ -1,4 +1,16 @@
-"""Training, model comparison and prediction for cooler, valve and pump."""
+"""Model selection, evaluation and prediction for the four components.
+
+Evaluation protocol per target:
+  1. Hold out a stratified 20 % test set. It is used exactly once, at the end.
+  2. On the remaining 80 %, compare candidate models with 5-fold
+     cross-validation (time-blocked or stratified, see config.TARGET_CV).
+  3. Pick the model with the best mean CV accuracy.
+  4. Fit it on the 80 % and report accuracy and macro F1 on the test set.
+  5. Refit on all data for deployment.
+
+Choosing the model on CV and reporting on an untouched test set keeps the
+reported number honest: the test set played no part in the choice.
+"""
 
 from __future__ import annotations
 
@@ -8,35 +20,57 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.base import ClassifierMixin
+from sklearn.ensemble import (
+    ExtraTreesClassifier,
+    HistGradientBoostingClassifier,
+    RandomForestClassifier,
+)
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.model_selection import train_test_split
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score
+from sklearn.model_selection import KFold, StratifiedKFold, cross_val_score, train_test_split
+from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 
-from .config import TARGETS
-from .features import feature_names
+from .config import TARGET_CV, TARGETS
+from .features import feature_names, sensor_of
+
+N_FOLDS = 5
 
 
-def candidate_models(seed: int = 42) -> dict[str, Pipeline]:
+def candidate_models(seed: int = 42) -> dict[str, ClassifierMixin]:
     return {
+        # linear baseline; needs scaled features
         "logistic_regression": make_pipeline(
-            StandardScaler(), LogisticRegression(max_iter=2000)
+            StandardScaler(), LogisticRegression(max_iter=3000)
         ),
-        "knn": make_pipeline(StandardScaler(), KNeighborsClassifier(n_neighbors=7)),
-        "random_forest": make_pipeline(
-            RandomForestClassifier(n_estimators=200, random_state=seed, n_jobs=-1)
+        # tree ensembles; scale-invariant
+        "random_forest": RandomForestClassifier(
+            n_estimators=300, random_state=seed, n_jobs=-1
         ),
+        "extra_trees": ExtraTreesClassifier(
+            n_estimators=300, random_state=seed, n_jobs=-1
+        ),
+        "gradient_boosting": HistGradientBoostingClassifier(random_state=seed),
     }
+
+
+def make_cv(scheme: str, seed: int = 42):
+    if scheme == "blocked":
+        return KFold(N_FOLDS, shuffle=False)
+    if scheme == "stratified":
+        return StratifiedKFold(N_FOLDS, shuffle=True, random_state=seed)
+    raise ValueError(f"unknown CV scheme: {scheme}")
 
 
 @dataclass
 class TargetResult:
     target: str
-    scores: dict[str, float]          # model name -> test accuracy
+    cv_scheme: str
+    cv_scores: dict[str, tuple[float, float]]  # model -> (mean, std) CV accuracy
     best_model: str
+    test_accuracy: float
+    test_f1_macro: float
     confusion: np.ndarray
     labels: list[int]
 
@@ -45,43 +79,81 @@ class TargetResult:
 class TrainingReport:
     results: dict[str, TargetResult] = field(default_factory=dict)
 
-    def table(self) -> pd.DataFrame:
+    def cv_table(self) -> pd.DataFrame:
+        """Mean CV accuracy of every candidate, one row per target."""
         return pd.DataFrame(
-            {t: r.scores for t, r in self.results.items()}
+            {t: {m: s[0] for m, s in r.cv_scores.items()} for t, r in self.results.items()}
         ).T.round(4)
+
+    def summary(self) -> pd.DataFrame:
+        rows = []
+        for t, r in self.results.items():
+            mean, std = r.cv_scores[r.best_model]
+            rows.append({
+                "component": t,
+                "cv_scheme": r.cv_scheme,
+                "best_model": r.best_model,
+                "cv_accuracy": f"{mean:.4f} ± {std:.4f}",
+                "test_accuracy": round(r.test_accuracy, 4),
+                "test_f1_macro": round(r.test_f1_macro, 4),
+            })
+        return pd.DataFrame(rows).set_index("component")
 
 
 def train_all(
-    X: pd.DataFrame, profile: pd.DataFrame, test_size: float = 0.2, seed: int = 42
-) -> tuple[dict[str, Pipeline], TrainingReport]:
-    """Fit every candidate per target, keep the best by test accuracy.
-
-    The winner is refitted on all data before it is returned.
-    """
-    best: dict[str, Pipeline] = {}
+    X: pd.DataFrame,
+    profile: pd.DataFrame,
+    targets: list[str] | None = None,
+    test_size: float = 0.2,
+    seed: int = 42,
+) -> tuple[dict[str, ClassifierMixin], TrainingReport]:
+    targets = targets or list(TARGETS)
+    X = X.reset_index(drop=True)
+    best: dict[str, ClassifierMixin] = {}
     report = TrainingReport()
-    for target in TARGETS:
-        y = profile[target].to_numpy()
-        X_tr, X_te, y_tr, y_te = train_test_split(
-            X, y, test_size=test_size, random_state=seed, stratify=y
-        )
-        scores, fitted = {}, {}
-        for name, model in candidate_models(seed).items():
-            model.fit(X_tr, y_tr)
-            scores[name] = accuracy_score(y_te, model.predict(X_te))
-            fitted[name] = model
-        winner = max(scores, key=scores.get)
-        labels = sorted(TARGETS[target])
-        cm = confusion_matrix(y_te, fitted[winner].predict(X_te), labels=labels)
-        report.results[target] = TargetResult(target, scores, winner, cm, labels)
 
-        final = candidate_models(seed)[winner]
-        final.fit(X, y)
-        best[target] = final
+    for target in targets:
+        y = profile[target].to_numpy()
+        train_idx, test_idx = train_test_split(
+            np.arange(len(y)), test_size=test_size, random_state=seed, stratify=y
+        )
+        train_idx.sort()  # keep time order so blocked folds are contiguous in time
+        X_tr, y_tr = X.iloc[train_idx], y[train_idx]
+        X_te, y_te = X.iloc[test_idx], y[test_idx]
+
+        scheme = TARGET_CV.get(target, "stratified")
+        cv_scores = {}
+        for name, model in candidate_models(seed).items():
+            s = cross_val_score(model, X_tr, y_tr, cv=make_cv(scheme, seed))
+            cv_scores[name] = (float(s.mean()), float(s.std()))
+        winner = max(cv_scores, key=lambda m: cv_scores[m][0])
+
+        model = candidate_models(seed)[winner].fit(X_tr, y_tr)
+        pred = model.predict(X_te)
+        labels = sorted(TARGETS[target])
+        report.results[target] = TargetResult(
+            target=target,
+            cv_scheme=scheme,
+            cv_scores=cv_scores,
+            best_model=winner,
+            test_accuracy=float(accuracy_score(y_te, pred)),
+            test_f1_macro=float(f1_score(y_te, pred, average="macro")),
+            confusion=confusion_matrix(y_te, pred, labels=labels),
+            labels=labels,
+        )
+
+        best[target] = candidate_models(seed)[winner].fit(X, y)
     return best, report
 
 
-def save_models(models: dict[str, Pipeline], path: str | Path) -> None:
+def sensor_importance(X: pd.DataFrame, y: np.ndarray, seed: int = 42) -> pd.Series:
+    """Share of extra-trees impurity importance per sensor (sums to 1)."""
+    et = ExtraTreesClassifier(n_estimators=300, random_state=seed, n_jobs=-1).fit(X, y)
+    imp = pd.Series(et.feature_importances_, index=X.columns)
+    return imp.groupby(imp.index.map(sensor_of)).sum().sort_values(ascending=False)
+
+
+def save_models(models: dict[str, ClassifierMixin], path: str | Path) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     joblib.dump({"features": feature_names(), "models": models}, path)
 
@@ -89,7 +161,7 @@ def save_models(models: dict[str, Pipeline], path: str | Path) -> None:
 class ConditionPredictor:
     """Prediction logic, independent of any web framework."""
 
-    def __init__(self, models: dict[str, Pipeline], features: list[str]):
+    def __init__(self, models: dict[str, ClassifierMixin], features: list[str]):
         self.models = models
         self.features = features
 

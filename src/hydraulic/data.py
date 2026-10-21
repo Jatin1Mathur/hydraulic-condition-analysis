@@ -48,7 +48,10 @@ def load_dataset(data_dir: str | Path) -> HydraulicDataset:
         path = data_dir / f"{name}.txt"
         if not path.exists():
             raise FileNotFoundError(f"{path} not found; see README for the download link")
-        signals[name] = np.loadtxt(path, dtype=np.float32)
+        # pandas' C parser is ~20x faster than np.loadtxt on the 90 MB files
+        signals[name] = pd.read_csv(
+            path, sep=r"\s+", header=None, dtype=np.float32, engine="c"
+        ).to_numpy()
     profile = pd.read_csv(
         data_dir / "profile.txt", sep=r"\s+", header=None, names=PROFILE_COLUMNS
     )
@@ -64,7 +67,8 @@ def make_synthetic(
 
     Fault states shift the signals the way they do on the real rig:
     a weak cooler raises temperatures, valve lag slows pressure build-up,
-    and pump leakage lowers flow and raises motor power. `sample_scale`
+    pump leakage lowers flow and raises motor power, and a weak accumulator
+    leaves more pressure ripple. `sample_scale`
     shrinks the samples per cycle so tests run fast.
     """
     rng = np.random.default_rng(seed)
@@ -79,6 +83,7 @@ def make_synthetic(
     cooler_deg = (100 - profile["cooler"].to_numpy()) / 97      # 0 good .. 1 failed
     valve_deg = (100 - profile["valve"].to_numpy()) / 27
     pump_deg = profile["pump"].to_numpy() / 2
+    acc_deg = (130 - profile["accumulator"].to_numpy()) / 40   # 0 good .. 1 failed
 
     signals: dict[str, np.ndarray] = {}
     for name, full_len in SENSORS.items():
@@ -89,7 +94,10 @@ def make_synthetic(
         if name.startswith("PS"):
             base = 150 if name in ("PS1", "PS2", "PS3") else 10
             rise = 1 - np.exp(-t[None, :] * (12 - 8 * valve_deg[:, None]))
-            sig = base * (0.6 + 0.4 * rise) * (1 - 0.05 * pump_deg[:, None]) + 1.5 * noise
+            # a weak accumulator damps pressure pulsation less -> more ripple
+            ripple = (1 + 6 * acc_deg[:, None]) * np.sin(2 * np.pi * 8 * t[None, :])
+            sig = (base * (0.6 + 0.4 * rise) * (1 - 0.05 * pump_deg[:, None])
+                   + ripple + 1.5 * noise)
         elif name == "EPS1":
             sig = 2400 + 120 * pump_deg[:, None] + 25 * noise
         elif name.startswith("FS"):

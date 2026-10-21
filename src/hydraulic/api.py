@@ -9,7 +9,7 @@ import numpy as np
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from .config import SENSORS
+from .config import N_WINDOWS, SENSORS
 from .features import cycle_features
 from .model import ConditionPredictor
 
@@ -17,8 +17,8 @@ MODEL_PATH = os.environ.get("HYDRAULIC_MODEL_PATH", "models/condition_models.job
 
 app = FastAPI(
     title="Hydraulic Condition API",
-    description="Predicts cooler, valve and pump condition from one load cycle.",
-    version="1.0.0",
+    description="Predicts cooler, valve, pump and accumulator condition from one load cycle.",
+    version="1.1.0",
 )
 
 
@@ -38,9 +38,9 @@ class CycleRequest(BaseModel):
         unknown = sorted(set(v) - set(SENSORS))
         if unknown:
             raise ValueError(f"unknown sensors: {unknown}")
-        empty = [k for k, samples in v.items() if len(samples) < 2]
-        if empty:
-            raise ValueError(f"sensors need at least 2 samples: {empty}")
+        short = [k for k, samples in v.items() if len(samples) < N_WINDOWS]
+        if short:
+            raise ValueError(f"sensors need at least {N_WINDOWS} samples: {short}")
         return v
 
 
@@ -60,6 +60,7 @@ class PredictionResponse(BaseModel):
     cooler: ConditionOut
     valve: ConditionOut
     pump: ConditionOut
+    accumulator: ConditionOut
 
 
 @lru_cache
