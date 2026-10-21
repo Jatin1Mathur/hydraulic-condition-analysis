@@ -149,3 +149,7 @@ reports/        plots and results from the real-data run
 - Frequency-domain features (FFT band energy on PS and EPS1)
 - Hyperparameter search inside the cross-validation
 - Use the `stable` flag to study cycles where the rig had not reached steady state
+
+## License
+
+[MIT](LICENSE) © 2026 Jatin Mathur
