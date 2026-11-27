@@ -40,17 +40,30 @@ TARGETS: dict[str, dict[int, str]] = {
     },
 }
 
+# Time-blocked evaluation.
+# Consecutive cycles on the rig are near-copies (a valve state lasts ~15 cycles,
+# an accumulator state ~180), so any split that puts neighbouring cycles on
+# both sides leaks. The cycle sequence is cut into N_TIME_BLOCKS contiguous
+# blocks. Every TEST_EVERY-th block is the held-out test set, spread over the
+# whole run so that every condition level appears in it. PURGE_CYCLES cycles on
+# each side of a test block are dropped from training, so no training cycle
+# sits right next to a test cycle.
+N_TIME_BLOCKS = 20
+TEST_EVERY = 5          # blocks 2, 7, 12, 17 -> 20 % of cycles
+TEST_OFFSET = 2
+PURGE_CYCLES = 15
+
 # How models are selected per target.
-# "blocked": time-ordered folds (consecutive cycles stay together), so the score
-#   reflects unseen operating periods, not near-duplicate neighbouring cycles.
-# "stratified": shuffled folds. Used where a label occurs in only a few long
-#   blocks of time (cooler: 3 blocks, accumulator: 12), so a held-out time
-#   block would contain a class the model never saw.
+# "purged": the training cycles are cut into contiguous blocks, folds take
+#   every k-th block, and cycles next to a validation block are left out of
+#   that fold's training data. Used for every component.
+# "blocked" (plain time-ordered folds) and "stratified" (shuffled folds) are
+# kept for comparison.
 TARGET_CV: dict[str, str] = {
-    "cooler": "stratified",
-    "valve": "blocked",
-    "pump": "blocked",
-    "accumulator": "stratified",
+    "cooler": "purged",
+    "valve": "purged",
+    "pump": "purged",
+    "accumulator": "purged",
 }
 
 # whole-cycle statistics

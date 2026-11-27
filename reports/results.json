@@ -4,28 +4,29 @@
   "n_features": 204,
   "components": {
     "cooler": {
-      "cv_scheme": "stratified",
-      "best_model": "gradient_boosting",
+      "cv_scheme": "purged",
+      "best_model": "logistic_regression",
       "cv_scores": {
         "logistic_regression": {
-          "mean": 0.9983,
-          "std": 0.0014
+          "mean": 0.9782,
+          "std": 0.0365
         },
         "random_forest": {
-          "mean": 0.9983,
-          "std": 0.0014
+          "mean": 0.9727,
+          "std": 0.046
         },
         "extra_trees": {
-          "mean": 0.9983,
-          "std": 0.0014
+          "mean": 0.9739,
+          "std": 0.0477
         },
         "gradient_boosting": {
-          "mean": 0.9989,
-          "std": 0.0014
+          "mean": 0.9491,
+          "std": 0.1003
         }
       },
       "test_accuracy": 1.0,
       "test_f1_macro": 1.0,
+      "random_split_accuracy": 1.0,
       "top_sensors": {
         "CE": 0.291,
         "PS6": 0.124,
@@ -33,28 +34,29 @@
       }
     },
     "valve": {
-      "cv_scheme": "blocked",
+      "cv_scheme": "purged",
       "best_model": "gradient_boosting",
       "cv_scores": {
         "logistic_regression": {
-          "mean": 0.9139,
-          "std": 0.0865
+          "mean": 0.9579,
+          "std": 0.0343
         },
         "random_forest": {
-          "mean": 0.9461,
-          "std": 0.0448
+          "mean": 0.9658,
+          "std": 0.0337
         },
         "extra_trees": {
-          "mean": 0.8582,
-          "std": 0.0798
+          "mean": 0.9111,
+          "std": 0.047
         },
         "gradient_boosting": {
-          "mean": 0.9835,
-          "std": 0.0163
+          "mean": 0.9884,
+          "std": 0.0152
         }
       },
-      "test_accuracy": 0.9909,
-      "test_f1_macro": 0.9884,
+      "test_accuracy": 0.9977,
+      "test_f1_macro": 0.9978,
+      "random_split_accuracy": 0.9909,
       "top_sensors": {
         "PS2": 0.249,
         "FS1": 0.169,
@@ -62,28 +64,29 @@
       }
     },
     "pump": {
-      "cv_scheme": "blocked",
+      "cv_scheme": "purged",
       "best_model": "logistic_regression",
       "cv_scores": {
         "logistic_regression": {
-          "mean": 0.979,
-          "std": 0.0251
+          "mean": 0.9945,
+          "std": 0.0067
         },
         "random_forest": {
-          "mean": 0.9484,
-          "std": 0.0713
+          "mean": 0.9633,
+          "std": 0.0453
         },
         "extra_trees": {
-          "mean": 0.9473,
-          "std": 0.0717
+          "mean": 0.9719,
+          "std": 0.0381
         },
         "gradient_boosting": {
-          "mean": 0.9694,
-          "std": 0.0584
+          "mean": 0.9762,
+          "std": 0.0402
         }
       },
-      "test_accuracy": 1.0,
-      "test_f1_macro": 1.0,
+      "test_accuracy": 0.9909,
+      "test_f1_macro": 0.9874,
+      "random_split_accuracy": 1.0,
       "top_sensors": {
         "SE": 0.32,
         "FS1": 0.284,
@@ -91,28 +94,29 @@
       }
     },
     "accumulator": {
-      "cv_scheme": "stratified",
-      "best_model": "extra_trees",
+      "cv_scheme": "purged",
+      "best_model": "gradient_boosting",
       "cv_scores": {
         "logistic_regression": {
-          "mean": 0.9546,
-          "std": 0.0086
+          "mean": 0.4456,
+          "std": 0.214
         },
         "random_forest": {
-          "mean": 0.9898,
-          "std": 0.0042
+          "mean": 0.4244,
+          "std": 0.2027
         },
         "extra_trees": {
-          "mean": 0.9921,
-          "std": 0.0042
+          "mean": 0.412,
+          "std": 0.2172
         },
         "gradient_boosting": {
-          "mean": 0.9892,
-          "std": 0.006
+          "mean": 0.5411,
+          "std": 0.2135
         }
       },
-      "test_accuracy": 0.9909,
-      "test_f1_macro": 0.9901,
+      "test_accuracy": 0.449,
+      "test_f1_macro": 0.3887,
+      "random_split_accuracy": 0.9932,
       "top_sensors": {
         "FS2": 0.109,
         "SE": 0.085,

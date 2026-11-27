@@ -3,7 +3,13 @@ import pytest
 from sklearn.model_selection import KFold
 
 from hydraulic.config import TARGET_CV, TARGETS
-from hydraulic.model import ConditionPredictor, make_cv, sensor_importance
+from hydraulic.model import (
+    ConditionPredictor,
+    PurgedBlockKFold,
+    make_cv,
+    sensor_importance,
+    time_blocked_holdout,
+)
 
 CANDIDATES = {"logistic_regression", "random_forest", "extra_trees", "gradient_boosting"}
 
@@ -27,7 +33,8 @@ def test_models_beat_chance_on_synthetic_data(trained):
 def test_summary_has_test_metrics(trained):
     summary = trained[1].summary()
     assert list(summary.index) == list(TARGETS)
-    assert {"best_model", "cv_accuracy", "test_accuracy", "test_f1_macro"} <= set(summary.columns)
+    assert {"best_model", "cv_accuracy", "test_accuracy", "test_f1_macro",
+            "random_split_accuracy"} <= set(summary.columns)
 
 
 def test_blocked_cv_keeps_time_order():
@@ -35,6 +42,24 @@ def test_blocked_cv_keeps_time_order():
     assert isinstance(cv, KFold) and not cv.shuffle
     folds = [test for _, test in cv.split(np.arange(100))]
     assert all((np.diff(f) == 1).all() for f in folds)
+
+    # purged block CV: folds cover every row once, and no training row
+    # sits within the purge gap of a validation row
+    purged = make_cv("purged")
+    assert isinstance(purged, PurgedBlockKFold)
+    n = 300
+    seen = np.zeros(n, dtype=int)
+    for train, val in purged.split(np.arange(n)):
+        seen[val] += 1
+        gap = np.abs(train[:, None] - val[None, :]).min()
+        assert gap > min(purged.purge, n // purged.n_blocks // 2)
+    assert (seen == 1).all()
+
+    # time-blocked hold-out: 20 % test, spread over time, purged from training
+    train, test = time_blocked_holdout(2205)
+    assert len(test) / 2205 == pytest.approx(0.2, abs=0.01)
+    assert test.min() < 400 and test.max() > 1800
+    assert np.abs(train[:, None] - test[None, :]).min() > 15
 
 
 def test_unknown_cv_scheme_raises():

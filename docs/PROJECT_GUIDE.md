@@ -88,14 +88,22 @@ The random split was hiding a 25-point gap. With only averages and extremes, the
 
 This guide and [ARCHITECTURE.md](ARCHITECTURE.md) were added.
 
+### Step 7: A time-blocked hold-out for every component
+
+The 20 % test set had been a random stratified sample, so most test cycles still had near-copy neighbours in the training data. The test set was replaced by a **time-blocked hold-out**: every 5th block of consecutive cycles (20 %, spread over the whole run so every condition level appears), with 15 cycles on each side of a test block removed from training. Model selection now uses **purged block CV** for all four components. The same model is also scored on a random split for comparison.
+
+Result: cooler, valve and pump stay at 99–100 % on unseen time blocks. The **accumulator falls from 99.3 % (random split) to 44.9 %**. Its states run in 12 long periods of ~180 cycles, and the model had learned what those periods look like rather than the accumulator's own effect. A random split hid this completely.
+
 ## 4. Final results
 
-| Component | Selected model | CV accuracy | Test accuracy | Macro F1 |
-|---|---|---|---|---|
-| Cooler | Gradient boosting | 99.89 % ± 0.14 | 100.0 % | 1.000 |
-| Valve | Gradient boosting | 98.35 % ± 1.63 (time-blocked) | 99.1 % | 0.988 |
-| Pump | Logistic regression | 97.90 % ± 2.51 (time-blocked) | 100.0 % | 1.000 |
-| Accumulator | Extra trees | 99.21 % ± 0.42 | 99.1 % | 0.990 |
+Time-blocked hold-out (every 5th block of cycles, 15-cycle purge gap); model chosen by purged block CV.
+
+| Component | Selected model | CV accuracy (purged blocks) | Time-blocked test accuracy | Macro F1 | Random-split accuracy |
+|---|---|---|---|---|---|
+| Cooler | Logistic regression | 97.8 % ± 3.7 | 100.0 % | 1.000 | 100.0 % |
+| Valve | Gradient boosting | 98.8 % ± 1.5 | 99.8 % | 0.998 | 99.1 % |
+| Pump | Logistic regression | 99.5 % ± 0.7 | 99.1 % | 0.987 | 100.0 % |
+| Accumulator | Gradient boosting | 54.1 % ± 21.4 | 44.9 % | 0.389 | 99.3 % |
 
 Most important sensors per component: cooler → cooling efficiency (CE); valve → pressure (PS2) and flow (FS1); pump → efficiency (SE), flow (FS1), motor power (EPS1); accumulator → spread across many sensors.
 
@@ -157,7 +165,7 @@ Most important sensors per component: cooler → cooling efficiency (CE); valve 
 | Python 3 | Whole project | everywhere |
 | NumPy | Vectorised features along `axis=1`; slope via matrix product; synthetic signals | `features.py`, `data.py` |
 | pandas | Fast parsing of the large text files; feature table; label analysis | `data.py`, `features.py` |
-| scikit-learn | `LogisticRegression`, `RandomForestClassifier`, `ExtraTreesClassifier`, `HistGradientBoostingClassifier`, `StandardScaler`, `make_pipeline`, `train_test_split`, `KFold`, `StratifiedKFold`, `cross_val_score`, `accuracy_score`, `f1_score`, `confusion_matrix` | `model.py` |
+| scikit-learn | `LogisticRegression`, `RandomForestClassifier`, `ExtraTreesClassifier`, `HistGradientBoostingClassifier`, `StandardScaler`, `make_pipeline`, `train_test_split` (random-split comparison), `KFold`, `StratifiedKFold`, a custom purged block splitter, `cross_val_score`, `accuracy_score`, `f1_score`, `confusion_matrix` | `model.py` |
 | joblib | Saving and loading the trained model bundle | `model.py` |
 | Matplotlib | Model comparison, confusion matrices, sensor importance plots (headless `Agg` backend) | `train.py` |
 | FastAPI | REST endpoints, dependency injection, automatic Swagger docs | `api.py` |
@@ -196,7 +204,7 @@ hydraulic-condition-analysis/
 ## 8. Interview preparation
 
 **Describe the project in 30 seconds.**
-I built a system that detects faults in four parts of a hydraulic machine from 17 sensor signals. It reaches 99–100 % test accuracy and serves predictions through a tested FastAPI service. The most interesting part was discovering that a random test split hid a real weakness: tested on unseen time periods, the valve model was only 73 % accurate. Adding time-based features raised it to 98 %.
+I built a system that detects faults in four parts of a hydraulic machine from 17 sensor signals. On unseen time blocks it reaches 99–100 % for cooler, valve and pump, and serves predictions through a tested FastAPI service. The most interesting part was discovering that a random test split hid a real weakness: tested on unseen time periods, the valve model was only 73 % accurate. Adding time-based features raised it to 98 %.
 
 **Why not feed the raw signals to the model?**
 6,000 values per pressure sensor, at different rates per sensor, give about 44,000 inputs per cycle for only 2,205 examples. Summarising each sensor into 12 features solves the different sampling rates, keeps the model small, and makes the features interpretable.
