@@ -36,7 +36,7 @@ def plot_model_comparison(report: TrainingReport, out: Path) -> Path:
     lo = max(0.0, table.min().min() - 0.05)
     ax.set_ylim(lo, 1.005)
     ax.set_ylabel("Mean 5-fold CV accuracy")
-    ax.set_title("Model comparison per component (cross-validation on training data)")
+    ax.set_title("Model comparison per component (purged block CV on training data)")
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.08), ncol=4, fontsize=8, frameon=False)
     ax.grid(axis="y", alpha=0.3)
     return _save(fig, out / "model_comparison.png")
@@ -55,7 +55,7 @@ def plot_confusions(report: TrainingReport, out: Path) -> Path:
             for j in range(len(r.labels)):
                 ax.text(j, i, cm[i, j], ha="center", va="center", fontsize=9,
                         color="white" if cm[i, j] > cm.max() / 2 else "black")
-        ax.set_title(f"{target}: {r.best_model}\ntest acc {r.test_accuracy:.3f}", fontsize=10)
+        ax.set_title(f"{target}: {r.best_model}\ntime-blocked test acc {r.test_accuracy:.3f}", fontsize=10)
         ax.set_xlabel("predicted")
         ax.set_ylabel("actual")
     return _save(fig, out / "confusion_matrices.png")
@@ -86,6 +86,7 @@ def write_results(report: TrainingReport, importance: dict[str, pd.Series],
                               for m, (a, b) in r.cv_scores.items()},
                 "test_accuracy": round(r.test_accuracy, 4),
                 "test_f1_macro": round(r.test_f1_macro, 4),
+                "random_split_accuracy": round(r.random_split_accuracy, 4),
                 "top_sensors": importance[t].head(3).round(3).to_dict(),
             }
             for t, r in report.results.items()
@@ -114,7 +115,7 @@ def main(argv: list[str] | None = None) -> None:
 
     models, report = train_all(X, ds.profile)
     print("\nCV accuracy of every candidate:\n" + report.cv_table().to_string())
-    print("\nSelected models, evaluated on the held-out test set:\n"
+    print("\nSelected models, evaluated on the time-blocked test set:\n"
           + report.summary().to_string())
 
     importance = {t: sensor_importance(X, ds.profile[t].to_numpy()) for t in report.results}

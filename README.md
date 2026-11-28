@@ -6,41 +6,45 @@ Classifies the condition of four components of a hydraulic test rig (**cooler**,
 
 ## Results on the real dataset
 
-All 2,205 cycles of the UCI dataset, 204 features per cycle. The model for each component is chosen by 5-fold cross-validation on 80 % of the data and then scored once on the untouched 20 % test set.
+All 2,205 cycles of the UCI dataset, 204 features per cycle.
 
-| Component | Classes | Selected model | CV accuracy | Test accuracy | Test macro F1 |
-|---|---|---|---|---|---|
-| Cooler | 3 | Gradient boosting | 99.89 % ± 0.14 | **100.0 %** | 1.000 |
-| Valve | 4 | Gradient boosting | 98.35 % ± 1.63 *(time-blocked)* | **99.1 %** | 0.988 |
-| Pump | 3 | Logistic regression | 97.90 % ± 2.51 *(time-blocked)* | **100.0 %** | 1.000 |
-| Accumulator | 4 | Extra trees | 99.21 % ± 0.42 | **99.1 %** | 0.990 |
+**Evaluation is time-blocked.** Consecutive cycles on the rig are near-copies, so the held-out test set is every 5th block of consecutive cycles (20 %, spread over the whole run so every condition level appears), and 15 cycles on each side of a test block are removed from training. The model for each component is chosen by purged block cross-validation on the training cycles and then scored once on the time-blocked test set. For comparison, the same model is also scored on a random stratified 80/20 split.
+
+| Component | Classes | Selected model | CV accuracy (purged blocks) | **Time-blocked test accuracy** | Test macro F1 | Random-split accuracy |
+|---|---|---|---|---|---|---|
+| Cooler | 3 | Logistic regression | 97.8 % ± 3.7 | **100.0 %** | 1.000 | 100.0 % |
+| Valve | 4 | Gradient boosting | 98.8 % ± 1.5 | **99.8 %** | 0.998 | 99.1 % |
+| Pump | 3 | Logistic regression | 99.5 % ± 0.7 | **99.1 %** | 0.987 | 100.0 % |
+| Accumulator | 4 | Gradient boosting | 54.1 % ± 21.4 | **44.9 %** | 0.389 | 99.3 % |
 
 ![Confusion matrices](reports/confusion_matrices.png)
 
-### What changed the result: window features and honest validation
+### What the time-blocked evaluation shows
 
-Neighbouring cycles on the rig are almost identical, and a valve state lasts about 15 cycles on average. A random train/test split therefore puts near-duplicate cycles on both sides, which makes weak features look good. Valve and pump models are therefore selected with **time-blocked cross-validation**: consecutive cycles stay together, so each fold is a period of operation the model has not seen.
+**Cooler, valve and pump generalise to unseen periods of operation (99–100 %).** Their faults leave a stable physical fingerprint: cooling efficiency for the cooler, the timing of pressure build-up and flow for the valve, and efficiency, flow and motor power for the pump.
 
-Under that test, the original 68 whole-cycle statistics (mean, std, min, max) were not good enough for the valve:
+**The accumulator does not.** On a random split it scores 99.3 %, but on unseen time blocks only 44.9 %, a gap of about 54 points. Its states run in 12 long periods of about 180 cycles, and the model learns what those periods look like (slow drift of the rig) rather than the accumulator's own effect. Accuracy falls further the larger the gap between training and test cycles. This holds for every candidate model and also when only pressure and flow sensors are used. A random split hides this completely.
+
+### Window features: the 25-point valve gap
+
+Under time-blocked validation, the original 68 whole-cycle statistics (mean, std, min, max) were not good enough for the valve:
 
 | Features | Valve, time-blocked CV | Valve, random test split | Pump, time-blocked CV |
 |---|---|---|---|
 | 68 whole-cycle statistics | 72.9 % ± 12.9 | 98.0 % | 95.3 % ± 4.4 |
 | **204 with window, slope and roughness features** | **98.4 % ± 1.6** | **99.1 %** | **97.9 % ± 2.5** |
 
-The random split hid a 25-point gap. Valve lag changes **when** pressure builds up during the cycle, not its average level, so plain statistics lose that information. Splitting each cycle into six time windows and adding the linear slope recovers it.
-
-Cooler and accumulator use stratified CV instead: their states run in only 3 and 12 long blocks respectively, so a held-out time block would contain a class the model never saw.
+The random split hid a 25-point gap. Valve lag changes **when** pressure builds up during the cycle, not its average level, so plain statistics lose that information. Splitting each cycle into six time windows and adding the linear slope recovers it. (These numbers come from the earlier plain time-blocked folds without purge gap.)
 
 ### Which sensors matter
 
 ![Sensor importance](reports/sensor_importance.png)
 
-The importances match the physics of each fault:
+The importances match the physics of the three components that generalise:
 - **Cooler** depends on cooling efficiency (CE) and temperatures.
 - **Valve** depends on system pressure (PS2) and flow (FS1).
 - **Pump leakage** depends on the efficiency factor (SE), flow (FS1) and motor power (EPS1).
-- **Accumulator** is spread across many sensors, which fits a component that damps the whole system rather than driving one signal.
+- **Accumulator** importance is spread across many sensors with no clear physical signal, which fits the time-blocked result: the model has not found a stable accumulator fingerprint.
 
 ![Model comparison](reports/model_comparison.png)
 
@@ -52,10 +56,10 @@ Full numbers are in [`reports/results.json`](reports/results.json).
 |---|---|---|
 | Data | Loads 17 sensor files and the labels; checks alignment across cycles and rejects NaN/inf | `src/hydraulic/data.py` |
 | Features | Vectorised NumPy, 12 per sensor = 204: mean, std, min, max, 6 time-window means, slope, mean absolute change | `src/hydraulic/features.py` |
-| Models | Logistic regression, random forest, extra trees and gradient boosting; selected by 5-fold CV (time-blocked or stratified); scored once on a held-out test set; refit on all data | `src/hydraulic/model.py` |
+| Models | Logistic regression, random forest, extra trees and gradient boosting; selected by purged block CV; scored once on a time-blocked hold-out with a purge gap; compared with a random split; refit on all data | `src/hydraulic/model.py` |
 | Reports | Model comparison, confusion matrices, sensor importance, `results.json` | `src/hydraulic/train.py` |
 | Serving | FastAPI with Pydantic request models; 422 on invalid input, 503 if no model; prediction logic decoupled from the API | `src/hydraulic/api.py` |
-| Tests | 31 pytest tests: data validation, feature maths, CV scheme, model selection, API error paths | `tests/` |
+| Tests | 31 pytest tests: data validation, feature maths, time-blocked hold-out and purged CV, model selection, API error paths | `tests/` |
 
 ## Dataset
 
@@ -146,7 +150,7 @@ reports/        plots and results from the real-data run
 
 ## Possible extensions
 
-- Frequency-domain features (FFT band energy on PS and EPS1)
+- Accumulator features that are robust to slow drift of the rig: frequency-domain features (FFT band energy on PS and EPS1) for pressure pulsation, and per-period normalisation
 - Hyperparameter search inside the cross-validation
 - Use the `stable` flag to study cycles where the rig had not reached steady state
 

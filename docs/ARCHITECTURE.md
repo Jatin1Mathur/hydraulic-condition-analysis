@@ -92,18 +92,16 @@ All features are computed with NumPy along `axis=1`, so there is no Python loop 
 
 ```mermaid
 flowchart TD
-    X["Feature table (2,205 × 204)<br/>+ labels for one component"] --> SPLIT["Stratified split<br/>80 % train / 20 % test"]
-    SPLIT --> TR["Training set (80 %)<br/>sorted by time"]
-    SPLIT --> TE["Test set (20 %)<br/>locked away"]
-    TR --> CV{"5-fold CV scheme<br/>(config.TARGET_CV)"}
-    CV -->|"valve, pump"| BLK["Time-blocked folds<br/>consecutive cycles stay together"]
-    CV -->|"cooler, accumulator"| STR["Stratified shuffled folds"]
-    BLK --> CMP["Score 4 candidates:<br/>logistic regression, random forest,<br/>extra trees, gradient boosting"]
-    STR --> CMP
+    X["Feature table (2,205 × 204)<br/>+ labels for one component"] --> SPLIT["Time-blocked hold-out<br/>every 5th block of cycles = test (20 %)<br/>15-cycle purge gap"]
+    SPLIT --> TR["Training cycles<br/>in time order"]
+    SPLIT --> TE["Test blocks<br/>locked away"]
+    TR --> CV["Purged block CV<br/>interleaved blocks, purge gap"]
+    CV --> CMP["Score 4 candidates:<br/>logistic regression, random forest,<br/>extra trees, gradient boosting"]
     CMP --> WIN["Pick best mean CV accuracy"]
-    WIN --> FIT["Fit winner on training set"]
-    FIT --> EVAL["Score once on test set<br/>accuracy, macro F1, confusion matrix"]
+    WIN --> FIT["Fit winner on training cycles"]
+    FIT --> EVAL["Score once on test blocks<br/>accuracy, macro F1, confusion matrix"]
     TE --> EVAL
+    WIN --> RND["Comparison only:<br/>same model on a random 80/20 split"]
     EVAL --> FINAL["Refit winner on all data<br/>→ model bundle"]
 ```
 
@@ -111,9 +109,11 @@ This runs once per component (cooler, valve, pump, accumulator).
 
 **Why the test set is used only once:** if the model were chosen by its test score, the reported number would be biased upward, because the test set would have influenced the choice.
 
-**Why time-blocked folds for valve and pump:** consecutive cycles are nearly identical, and a valve state lasts about 15 cycles on average. With shuffled folds, near-duplicates of each test cycle sit in the training data, so weak features look strong. Time-blocked folds test on periods of operation the model has not seen.
+**Why time blocks with a purge gap:** consecutive cycles are nearly identical (a valve state lasts about 15 cycles, an accumulator state about 180). With a random split, near-duplicates of each test cycle sit in the training data, so the score measures recognition of neighbours. Whole blocks of cycles are held out, and 15 cycles next to each held-out block are dropped from training.
 
-**Why stratified folds for cooler and accumulator:** the cooler has only 3 contiguous states over the whole recording and the accumulator 12. A held-out time block would contain a class the model never saw, which tests nothing useful.
+**Why interleaved blocks:** the cooler has only 3 contiguous states and the accumulator 12. Taking every 5th block for testing (and every k-th block per CV fold) spreads the held-out cycles over the whole recording, so every condition level appears on both sides.
+
+**Why the random-split score is still reported:** the difference between the two scores shows how much a random split flatters a model. For the accumulator it is about 54 points.
 
 ### Candidate models
 
